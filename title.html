@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PIXEL RUNNER - Title</title>
+  <style>
+    :root { --bg: #0f1126; --fg:#eaf2ff; --accent:#7aa2ff; }
+    html, body { height:100%; margin:0; background: radial-gradient(1000px 600px at 50% 20%, #1b2250, #0f1126); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial; }
+    .wrap { min-height:100%; display:grid; grid-template-rows: 1fr auto; }
+    .center { display:grid; place-items:center; }
+    .panel { text-align:center; padding: 40px 24px; }
+    h1 { font-size: clamp(32px, 6vw, 72px); letter-spacing: .08em; margin: 0 0 12px; text-shadow: 0 6px 30px rgba(122,162,255,.35); }
+    p { margin: 6px 0; opacity: .9 }
+    .btn { display:inline-block; padding: 12px 20px; border-radius: 14px; background: #1e2a66; color:#fff; text-decoration:none; font-weight:700; box-shadow: 0 10px 30px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.06); }
+    .btn:hover { transform: translateY(-1px); }
+    .hint { margin-top: 14px; font-size: 12px; opacity: .7 }
+    footer { padding: 12px 16px; font-size: 12px; opacity:.6; text-align:center; }
+    .start { font-size: clamp(12px, 2vw, 14px); letter-spacing: .25em; margin-top: 10px; opacity: .85 }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="center">
+    <div class="panel">
+      <h1>PIXEL RUNNER</h1>
+      <p>Side Scrolling Action – Stage 1</p>
+      <a class="btn" href="index.html" id="startBtn">START GAME</a>
+      <div class="start">PRESS ENTER</div>
+      <div class="hint">← → で移動 / Space でジャンプ</div>
+    </div>
+  </div>
+  <footer>© You • GitHub Pages</footer>
+</div>
+<script>
+  addEventListener('keydown', (e)=>{ if (e.code === 'Enter' || e.code === 'Space') { location.href = 'index.html'; }});
+</script>
+</body>
+</html>
