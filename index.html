@@ -15,11 +15,6 @@
     html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
     #wrap { display: grid; place-items: center; height: 100%; }
     canvas { width: min(100vw, 1100px); height: min(100vh, 650px); image-rendering: pixelated; image-rendering: crisp-edges; background: linear-gradient(#1a1f44, #0f1126 60%); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.05); }
-    .overlay { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
-    .title { text-align: center; }
-    .game-title { font-size: clamp(28px, 5vw, 56px); letter-spacing: 0.08em; margin: 0 0 16px; text-shadow: 0 4px 20px rgba(122,162,255,.4); }
-    .press-start { font-size: clamp(10px, 2vw, 14px); opacity: .85; letter-spacing: 0.3em; }
-    .hint { margin-top: 18px; font-size: 12px; opacity: .7 }
     .hud { position: absolute; top: 12px; left: 12px; padding: 6px 10px; background: var(--hud); border-radius: 10px; backdrop-filter: blur(6px); font-weight: 700; }
     .hud .lives { display:inline-flex; gap:6px; align-items:center; }
     .badge { display:inline-block; width: 16px; height: 16px; background: var(--accent2); border-radius: 4px; box-shadow: inset 0 -2px 0 rgba(0,0,0,.2), 0 0 0 1px rgba(0,0,0,.25); }
@@ -29,41 +24,37 @@
 <body>
   <div id="wrap">
     <canvas id="game" width="1100" height="650" aria-label="横スクロールアクションゲーム"></canvas>
-    <div class="overlay" id="startOverlay" aria-hidden="false">
-      <div class="title">
-        <h1 class="game-title">PIXEL RUNNER</h1>
-        <div class="press-start" id="pressStart">PRESS START</div>
-        <div class="hint">Enter または Space で開始 / ← → で移動 / Space でジャンプ</div>
-      </div>
-    </div>
     <div class="hud" id="hud"><span class="lives"><span class="badge"></span> LIVES <span id="livesText">x3</span></span></div>
     <div class="credit">© You</div>
   </div>
 
   <script>
   // ================================
-  // Configurable: 差し替え可能なプレイヤースプライト
+  // Configurable: スプライト差し替え
   // ================================
-  const PLAYER_SPRITE_URL = ""; // ここに画像パス（例: "player.png"）。空のときは矩形描画。
+  const PLAYER_SPRITE_URL = "";             // 通常プレイヤー
+  const PLAYER_SPRITE_HIT_URL = "";         // ミス時プレイヤー
+
+  const ENEMY_SPRITE_URL = "";              // 通常敵
+  const ENEMY_SPRITE_DEAD_URL = "";         // 倒された敵
 
   // ================================
   // 基本ユーティリティ
   // ================================
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const now = () => performance.now();
 
   // キー入力
-  const Keys = { left:false, right:false, up:false, start:false };
+  const Keys = { left:false, right:false, up:false };
   addEventListener('keydown', (e)=>{
     if (e.code === 'ArrowLeft' || e.code === 'KeyA') Keys.left = true;
     if (e.code === 'ArrowRight' || e.code === 'KeyD') Keys.right = true;
     if (e.code === 'ArrowUp' || e.code === 'Space' || e.code === 'KeyW') Keys.up = true;
-    if (e.code === 'Enter' || e.code === 'Space') Keys.start = true;
   });
   addEventListener('keyup', (e)=>{
     if (e.code === 'ArrowLeft' || e.code === 'KeyA') Keys.left = false;
     if (e.code === 'ArrowRight' || e.code === 'KeyD') Keys.right = false;
     if (e.code === 'ArrowUp' || e.code === 'Space' || e.code === 'KeyW') Keys.up = false;
-    if (e.code === 'Enter' || e.code === 'Space') Keys.start = false;
   });
 
   // ================================
@@ -88,9 +79,8 @@
     height: 1000,
     spawn: { x: 100, y: 300 },
     groundY: 520,
-    // プラットフォーム: x,y,w,h
     platforms: [
-      {x:0, y:560, w:5000, h:200}, // 地面（当たり判定用は groundY を使うが補助として広め）
+      {x:0, y:560, w:5000, h:200},
       {x:400, y:450, w:180, h:20},
       {x:700, y:420, w:200, h:20},
       {x:1050, y:370, w:160, h:20},
@@ -105,13 +95,11 @@
       {x:3850, y:300, w:220, h:20},
       {x:4200, y:360, w:200, h:20}
     ],
-    // 敵（簡単な往復）: x,y,w,h,range,speed
     enemies: [
-      {x:820, y:390, w:34, h:34, vx:1.2, minX:700, maxX:900},
-      {x:1970, y:316, w:34, h:34, vx:1.3, minX:1900, maxX:2100},
-      {x:3220, y:346, w:34, h:34, vx:1.0, minX:3200, maxX:3400}
+      {x:820, y:390, w:34, h:34, vx:1.2, minX:700, maxX:900, dead:false, deadAt:0},
+      {x:1970, y:316, w:34, h:34, vx:1.3, minX:1900, maxX:2100, dead:false, deadAt:0},
+      {x:3220, y:346, w:34, h:34, vx:1.0, minX:3200, maxX:3400, dead:false, deadAt:0}
     ],
-    // ゴール（旗）
     goal: { x: 4700, y: 520 }
   };
 
@@ -130,25 +118,20 @@
     jump: 10.2,
     onGround: false,
     facing: 1,
+    stunnedUntil: 0,
   };
 
-  // スプライト（任意）
-  let playerImage = null, playerImgLoaded = false;
-  if (PLAYER_SPRITE_URL) {
-    playerImage = new Image();
-    playerImage.src = PLAYER_SPRITE_URL;
-    playerImage.onload = ()=> playerImgLoaded = true;
-  }
+  // スプライト読込
+  function loadImg(url){ if(!url) return null; const i=new Image(); i.src=url; return i; }
+  const sprites = {
+    player: loadImg(PLAYER_SPRITE_URL),
+    playerHit: loadImg(PLAYER_SPRITE_HIT_URL),
+    enemy: loadImg(ENEMY_SPRITE_URL),
+    enemyDead: loadImg(ENEMY_SPRITE_DEAD_URL),
+  };
 
-  // ライフ（無限、表示は x3 から開始し、0 を下回ったら x-1, x-2 ...）
   let lives = 3;
-
-  // ゲーム状態
-  let state = 'start'; // 'start' | 'playing' | 'clear'
-  let pressStartAlpha = 1, pressStartDir = -1;
-
   const hudLivesText = document.getElementById('livesText');
-  const startOverlay = document.getElementById('startOverlay');
   function updateHUD() { hudLivesText.textContent = 'x' + lives; }
   updateHUD();
 
@@ -159,36 +142,30 @@
   function rectsOverlap(a,b){ return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
 
   function moveAndCollide(ent) {
-    // 横移動
+    // 横
     ent.x += ent.vx;
-
-    // 地形との横方向衝突
     for (const p of LEVEL.platforms) {
       if (rectsOverlap(ent, p)) {
         if (ent.vx > 0) ent.x = p.x - ent.w; else if (ent.vx < 0) ent.x = p.x + p.w;
         ent.vx = 0;
       }
     }
-
-    // 重力 & 縦移動
+    // 縦
     ent.vy += GRAVITY;
     ent.y += ent.vy;
 
-    // 地面（groundY）
+    // 地面
     if (ent.y + ent.h >= LEVEL.groundY) {
       ent.y = LEVEL.groundY - ent.h; ent.vy = 0; ent.onGround = true;
     } else {
       ent.onGround = false;
     }
 
-    // プラットフォームとの縦方向衝突
+    // プラットフォーム
     for (const p of LEVEL.platforms) {
       if (p.y < LEVEL.groundY - 1 && rectsOverlap(ent, p)) {
-        if (ent.vy > 0) { // 上から着地
-          ent.y = p.y - ent.h; ent.vy = 0; ent.onGround = true;
-        } else if (ent.vy < 0) { // 下から当たる（打ち返し）
-          ent.y = p.y + p.h; ent.vy = 0.5;
-        }
+        if (ent.vy > 0) { ent.y = p.y - ent.h; ent.vy = 0; ent.onGround = true; }
+        else if (ent.vy < 0) { ent.y = p.y + p.h; ent.vy = 0.5; }
       }
     }
   }
@@ -198,22 +175,36 @@
     camera.x = clamp(player.x - W*0.35, 0, LEVEL.width - W);
   }
 
-  function die() {
+  function playerMiss() {
+    // 2秒スタン、色/スプライト変更、残機のみ減る（無限）
+    if (now() < player.stunnedUntil) return; // 連続ヒット防止
     lives -= 1; updateHUD();
-    resetToSpawn();
+    player.stunnedUntil = now() + 2000;
+    player.vx = 0; player.vy = 0; // 完全停止
   }
 
   // ================================
-  // 敵の挙動
+  // 敵
   // ================================
-  function updateEnemies() {
+  function updateEnemies(dtMs) {
     for (const e of LEVEL.enemies) {
+      if (e.dead) continue;
       e.x += e.vx;
       if (e.x < e.minX) { e.x = e.minX; e.vx *= -1; }
       if (e.x + e.w > e.maxX) { e.x = e.maxX - e.w; e.vx *= -1; }
-      // プレイヤー接触でミス
+
+      // プレイヤーとの衝突
       if (rectsOverlap(player, e)) {
-        die();
+        const prevBottom = player.y + player.h - player.vy; // 衝突前の概算
+        const isStomp = (prevBottom <= e.y + 6) && (player.vy > 0);
+        if (isStomp) {
+          // 敵を倒す
+          e.dead = true; e.deadAt = now();
+          player.vy = -9.5; // バウンド
+        } else {
+          // プレイヤーミス
+          playerMiss();
+        }
       }
     }
   }
@@ -221,136 +212,101 @@
   // ================================
   // 入力→プレイヤー制御
   // ================================
-  function controlPlayer() {
-    // 水平加速
+  function controlPlayer(active) {
+    if (!active) return; // スタン中は無効
     const dir = (Keys.right?1:0) - (Keys.left?1:0);
-    if (dir !== 0) {
-      player.vx += dir * player.acc;
-      player.facing = dir;
-    } else {
-      player.vx *= player.friction;
-    }
+    if (dir !== 0) { player.vx += dir * player.acc; player.facing = dir; }
+    else { player.vx *= player.friction; }
     player.vx = clamp(player.vx, -player.maxSpeed, player.maxSpeed);
-
-    // ジャンプ
-    if (Keys.up && player.onGround) {
-      player.vy = -player.jump;
-      player.onGround = false;
-    }
-
-    // 画面外落下
-    if (player.y > H + 200) die();
+    if (Keys.up && player.onGround) { player.vy = -player.jump; player.onGround = false; }
+    if (player.y > H + 200) { playerMiss(); resetToSpawn(); }
   }
 
   // ================================
   // 描画
   // ================================
   function drawBackground() {
-    // パララックス：遠景の丘と星
     const skyGrad = ctx.createLinearGradient(0,0,0,H);
-    skyGrad.addColorStop(0, '#171c3f');
-    skyGrad.addColorStop(1, '#0f1126');
+    skyGrad.addColorStop(0, '#171c3f'); skyGrad.addColorStop(1, '#0f1126');
     ctx.fillStyle = skyGrad; ctx.fillRect(0,0,W,H);
-
     // 星
-    ctx.save();
-    ctx.globalAlpha = 0.6;
-    const ox = (camera.x*0.2)%W;
-    ctx.fillStyle = '#ffffff';
-    for (let i=0;i<80;i++) {
-      const x = ((i*61)%W) - ox; const y = (i*53)% (H*0.6);
-      ctx.fillRect(x, y+20, 2, 2);
-    }
+    ctx.save(); ctx.globalAlpha = 0.6; const ox = (camera.x*0.2)%W; ctx.fillStyle = '#ffffff';
+    for (let i=0;i<80;i++) { const x = ((i*61)%W) - ox; const y = (i*53)% (H*0.6); ctx.fillRect(x, y+20, 2, 2); }
     ctx.restore();
-
     // 丘
-    const hill = (baseY, amp, speed, color) => {
-      ctx.save();
-      ctx.translate(- (camera.x*speed)%W, 0);
-      ctx.fillStyle = color;
-      for (let k=-1; k<=2; k++) {
-        ctx.beginPath();
-        ctx.moveTo(k*W, H);
-        for (let x=0; x<=W; x+=20) {
-          const y = baseY + Math.sin((x+k*W)*0.003) * amp;
-          ctx.lineTo(k*W + x, y);
-        }
-        ctx.lineTo((k+1)*W, H); ctx.closePath(); ctx.fill();
-      }
-      ctx.restore();
-    };
-    hill(480, 30, 0.25, '#0b1331');
-    hill(520, 40, 0.4, '#0a0f28');
+    const hill = (baseY, amp, speed, color) => { ctx.save(); ctx.translate(- (camera.x*speed)%W, 0); ctx.fillStyle = color; for (let k=-1; k<=2; k++) { ctx.beginPath(); ctx.moveTo(k*W, H); for (let x=0; x<=W; x+=20) { const y = baseY + Math.sin((x+k*W)*0.003) * amp; ctx.lineTo(k*W + x, y);} ctx.lineTo((k+1)*W, H); ctx.closePath(); ctx.fill(); } ctx.restore(); };
+    hill(480, 30, 0.25, '#0b1331'); hill(520, 40, 0.4, '#0a0f28');
   }
 
   function drawWorld() {
-    // 地面ライン
     ctx.strokeStyle = '#263158'; ctx.lineWidth = 3; ctx.beginPath();
     ctx.moveTo(-camera.x, LEVEL.groundY + 1 - camera.y);
-    ctx.lineTo(LEVEL.width - camera.x, LEVEL.groundY + 1 - camera.y);
-    ctx.stroke();
+    ctx.lineTo(LEVEL.width - camera.x, LEVEL.groundY + 1 - camera.y); ctx.stroke();
 
-    // プラットフォーム
     for (const p of LEVEL.platforms) {
-      if (p === LEVEL.platforms[0]) continue; // 床は描画しない
+      if (p === LEVEL.platforms[0]) continue;
       const x = p.x - camera.x, y = p.y - camera.y;
-      ctx.fillStyle = '#32406b';
-      ctx.fillRect(x, y, p.w, p.h);
-      ctx.fillStyle = '#415189';
-      ctx.fillRect(x, y, p.w, 6); // エッジ
+      ctx.fillStyle = '#32406b'; ctx.fillRect(x, y, p.w, p.h);
+      ctx.fillStyle = '#415189'; ctx.fillRect(x, y, p.w, 6);
     }
 
     // 敵
+    const t = now();
     for (const e of LEVEL.enemies) {
       const x = e.x - camera.x, y = e.y - camera.y;
-      ctx.fillStyle = '#ff5964';
-      ctx.fillRect(x, y, e.w, e.h);
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(x+8, y+10, 6, 6); ctx.fillRect(x+20, y+10, 6, 6);
+      if (!e.dead) {
+        if (sprites.enemy) ctx.drawImage(sprites.enemy, x, y, e.w, e.h);
+        else { ctx.fillStyle = '#ff5964'; ctx.fillRect(x, y, e.w, e.h); ctx.fillStyle = '#fff'; ctx.fillRect(x+8, y+10, 6, 6); ctx.fillRect(x+20, y+10, 6, 6); }
+      } else {
+        const deadElapsed = t - e.deadAt;
+        if (sprites.enemyDead) {
+          ctx.globalAlpha = Math.max(0, 1 - deadElapsed/500);
+          ctx.drawImage(sprites.enemyDead, x, y, e.w, e.h);
+          ctx.globalAlpha = 1;
+        } else {
+          // バツ印演出
+          ctx.save();
+          ctx.translate(x + e.w/2, y + e.h/2);
+          const s = 18 + Math.min(12, deadElapsed*0.05);
+          ctx.strokeStyle = '#ff6b81'; ctx.lineWidth = 4; ctx.beginPath();
+          ctx.moveTo(-s, -s); ctx.lineTo(s, s);
+          ctx.moveTo(s, -s); ctx.lineTo(-s, s);
+          ctx.stroke();
+          ctx.restore();
+        }
+        // 一定時間後に消す
+        if (deadElapsed > 600) { e.w = 0; e.h = 0; e.x = -99999; }
+      }
     }
 
-    // ゴール旗
-    const g = LEVEL.goal;
-    const gx = g.x - camera.x, gy = g.y - camera.y;
-    ctx.fillStyle = '#6b80d6';
-    ctx.fillRect(gx, gy-120, 8, 120);
-    ctx.beginPath();
-    ctx.moveTo(gx+8, gy-115);
-    ctx.lineTo(gx+8+40, gy-100);
-    ctx.lineTo(gx+8, gy-85);
-    ctx.closePath();
-    ctx.fillStyle = '#ffd169';
-    ctx.fill();
+    // ゴール
+    const g = LEVEL.goal; const gx = g.x - camera.x, gy = g.y - camera.y;
+    ctx.fillStyle = '#6b80d6'; ctx.fillRect(gx, gy-120, 8, 120);
+    ctx.beginPath(); ctx.moveTo(gx+8, gy-115); ctx.lineTo(gx+48, gy-100); ctx.lineTo(gx+8, gy-85); ctx.closePath();
+    ctx.fillStyle = '#ffd169'; ctx.fill();
   }
 
   function drawPlayer() {
     const px = player.x - camera.x, py = player.y - camera.y;
-    if (playerImgLoaded) {
-      ctx.save();
-      if (player.facing < 0) { ctx.translate(px + player.w/2, 0); ctx.scale(-1,1); ctx.translate(-px - player.w/2, 0); }
-      ctx.drawImage(playerImage, px, py, player.w, player.h);
-      ctx.restore();
+    const stunned = now() < player.stunnedUntil;
+    if (stunned) {
+      // ヒット時: スプライトがあればそれ、なければ色変化
+      if (sprites.playerHit) {
+        ctx.save(); if (player.facing < 0) { ctx.translate(px + player.w/2, 0); ctx.scale(-1,1); ctx.translate(-px - player.w/2, 0); }
+        ctx.drawImage(sprites.playerHit, px, py, player.w, player.h); ctx.restore();
+      } else {
+        ctx.fillStyle = '#ff7777'; ctx.fillRect(px, py, player.w, player.h);
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(px+8, py+10, 6, 6);
+      }
     } else {
-      // 矩形プレースホルダ
-      ctx.fillStyle = '#7aa2ff';
-      ctx.fillRect(px, py, player.w, player.h);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(px+8, py+10, 6, 6); // 目
+      if (sprites.player) {
+        ctx.save(); if (player.facing < 0) { ctx.translate(px + player.w/2, 0); ctx.scale(-1,1); ctx.translate(-px - player.w/2, 0); }
+        ctx.drawImage(sprites.player, px, py, player.w, player.h); ctx.restore();
+      } else {
+        ctx.fillStyle = '#7aa2ff'; ctx.fillRect(px, py, player.w, player.h);
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(px+8, py+10, 6, 6);
+      }
     }
-  }
-
-  function drawClearBanner() {
-    ctx.save();
-    ctx.globalAlpha = 0.95;
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(W/2-160, H/2-60, 320, 120);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 28px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('STAGE CLEAR!', W/2, H/2 - 10);
-    ctx.font = '14px system-ui, sans-serif';
-    ctx.fillText('Enter でリスタート', W/2, H/2 + 26);
-    ctx.restore();
   }
 
   // ================================
@@ -361,58 +317,25 @@
     requestAnimationFrame(loop);
     const dt = Math.min(32, t - last); last = t;
 
-    // 状態別
-    if (state === 'start') {
-      // タイトルの点滅
-      pressStartAlpha += pressStartDir * 0.03 * (dt/16.7);
-      if (pressStartAlpha < 0.2) { pressStartAlpha = 0.2; pressStartDir = 1; }
-      if (pressStartAlpha > 1.0) { pressStartAlpha = 1.0; pressStartDir = -1; }
-      document.getElementById('pressStart').style.opacity = pressStartAlpha.toFixed(2);
-      if (Keys.start) {
-        startOverlay.setAttribute('aria-hidden','true');
-        state = 'playing';
-      }
-    }
-
-    // 描画（共通）
+    // 背景
     drawBackground();
 
-    if (state === 'playing') {
-      controlPlayer();
-      moveAndCollide(player);
-      updateEnemies();
-      followCamera(player);
+    const active = now() >= player.stunnedUntil; // スタンしてないときだけ操作/物理
+    controlPlayer(active);
+    if (active) moveAndCollide(player); // スタン時は完全停止
+    updateEnemies(dt);
+    followCamera(player);
 
-      // ゴール到達
-      const goalRect = {x:LEVEL.goal.x, y:LEVEL.goal.y-120, w:40, h:120};
-      if (rectsOverlap(player, goalRect)) state = 'clear';
-    }
-
-    if (state === 'clear') {
-      // クリア時は軽い慣性だけ
-      player.vx *= 0.95; player.vy += GRAVITY*0.5; moveAndCollide(player);
-      followCamera(player);
-      if (Keys.start) { // リスタート（残機は引き継ぎ）
-        resetToSpawn(); state = 'playing';
-      }
-    }
-
-    // ワールド・プレイヤー描画
     drawWorld();
     drawPlayer();
-
-    if (state === 'clear') drawClearBanner();
   }
   requestAnimationFrame(loop);
 
-  // 初期カメラ合わせ
+  // 初期カメラ
   camera.x = clamp(player.x - W*0.35, 0, LEVEL.width - W);
 
-  // ウィンドウリサイズ時に CSS ピクセルでの見え方を保つ（canvas の内部解像度は固定）
-  addEventListener('resize', ()=>{ /* CSS に任せるため空実装 */ });
-
-  // デバッグ：コンソールに API を露出
-  window.__game = { player, camera, LEVEL, die, resetToSpawn };
+  // デバッグAPI
+  window.__game = { player, camera, LEVEL, miss: playerMiss };
   </script>
 </body>
 </html>
